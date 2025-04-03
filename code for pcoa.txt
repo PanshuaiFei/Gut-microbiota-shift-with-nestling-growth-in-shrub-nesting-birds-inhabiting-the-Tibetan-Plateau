@@ -1,0 +1,58 @@
+#设置工作目录
+setwd("C:/Users/Administrator/Desktop/avian microbiome/avian microbiome/PCOA/B-PCOA")
+rm(list=ls())
+#加载包
+library(vegan)#计算距离时需要的包
+library(ggplot2)#绘图包
+library(scales)
+#读取数据，一般所需是数据行名为样本名、列名为OTUxxx的数据表
+otu_raw <- read.csv("B_OTU.csv",row.names = 1)
+#由于排序分析函数所需数据格式原因，需要对数据进行转置
+otu <- t(otu_raw)
+otu_helin=decostand(otu,"hellinger")
+#计算bray_curtis距离
+otu.distance=vegdist(otu_helin,method = "bray")
+#pcoa分析
+pcoa <- cmdscale (otu.distance,eig=TRUE)
+pc12 <- pcoa$points[,1:2]
+pc <- round(pcoa$eig/sum(pcoa$eig)*100,digits=2)#解释度
+#pc12原来是matrix,转化为data.frame
+pc12 <- as.data.frame(pc12)
+#给pc12添加samp1es变量
+pc12$samples <- row.names(pc12)
+#读入分组文件
+group <- read.csv("B_group.csv")
+#修改列名
+colnames(group) <- c("samples","group")
+#将绘图数据和分组合并
+df <- merge(pc12,group,by="samples")
+head(df)
+
+
+color <- rev(rainbow(14, start = 0, end = 0.7))  
+
+# 创建样本图
+pdf("pcoa.ind.pdf", width = 8, height = 8, family = "Times")
+ggplot(data = df, aes(x = V1, y = V2, color = group)) +
+  geom_point(size = 2) +
+  labs(x = paste0("PC1 (", pc[1], "%)"), y = paste0("PC2 (", pc[2], "%)")) +
+  coord_fixed(1) +  # 参数 1 表示将横轴（x轴）和纵轴（y轴）的比例设置为1:1
+  scale_color_manual(values = color) + 
+  scale_x_continuous(sec.axis = dup_axis(name = NULL, breaks = NULL, labels = NULL)) +
+  scale_y_continuous(sec.axis = dup_axis(name = NULL, breaks = NULL, labels = NULL)) +
+  theme_bw() +  # 将绘图的背景、文本、坐标轴等元素调整为黑白
+  theme(
+    plot.margin = unit(c(0.02, 0.02, 0.02, 0.02), "in"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    aspect.ratio = 1
+  ) +
+  scale_x_continuous(labels = label_number(accuracy = 0.01)) +
+  scale_y_continuous(labels = label_number(accuracy = 0.01)) +
+  #stat_ellipse(aes(group = group), type = "t", show.legend = FALSE) +  # 显示椭圆# type可选"t","norm","euclid"#
+  guides(color = guide_legend(title = "Treatment"))  # 显示颜色图例并添加标题
+
+dev.off()
+
+#####################################################################################
+dev.off()
+

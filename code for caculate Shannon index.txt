@@ -1,0 +1,16 @@
+
+#设置工作目录
+setwd("C:/Users/feips/Desktop/avian microbiome/shannon index")
+rm(list=ls())
+#加载包
+library(vegan)
+# 读取CSV文件
+otu_table <- read.csv("B_otu_raw.csv", row.names = 1, check.names = FALSE)
+#zhuanzhi
+otu<- t(otu_table)
+
+shannon <- diversity(otu , index ="shannon")
+# 检查转换后的数据
+head(shannon)
+
+write.csv(shannon, "shannon.csv")

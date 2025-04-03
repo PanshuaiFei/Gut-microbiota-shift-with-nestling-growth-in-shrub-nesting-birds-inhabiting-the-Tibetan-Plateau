@@ -1,0 +1,179 @@
+Call:
+ randomForest(formula = plant_age ~ ., data = otu_train.select,      importance = TRUE) 
+               Type of random forest: regression
+                     Number of trees: 500
+No. of variables tried at each split: 4
+
+          Mean of squared residuals: 8.158738
+                    % Var explained: 48.2
+
+
+
+setwd("C:/Users/feips/Desktop/avian microbiome/Random forest/B-time")
+rm(list = ls())
+
+##数据预处理
+#读取 OTUs 丰度表
+otu <- read.csv("B_time_microbiome_genus.csv", row.names = 1)
+
+
+#合并有关于植物生长时间的信息
+plant <- read.csv("B_time_group.csv", row.names = 1)
+
+
+otu <- otu[rownames(plant), ]
+otu <- cbind(otu, plant)
+
+#为了方便后续评估随机森林模型的性能
+#将总数据集分为训练集（占 70%）和测试集（占 30%）
+set.seed(123)
+train <- sample(nrow(otu), nrow(otu)*0.7)
+otu_train <- otu[train, ]
+otu_test <- otu[-train, ]
+
+##randomForest 包的随机森林
+library(randomForest)
+
+#随机森林计算（默认生成 500 棵决策树），详情 ?randomForest
+set.seed(123)
+otu_train.forest <- randomForest(plant_age~., data = otu_train, importance = TRUE)
+otu_train.forest
+
+#使用训练集，查看预测精度
+plant_predict <- predict(otu_train.forest, otu_train)
+
+plot(otu_train$plant_age, plant_predict, main = '训练集', 
+     xlab = 'Plant age (days)', ylab = 'Predict')
+abline(1, 1)
+
+#使用测试集，评估预测性能
+plant_predict <- predict(otu_train.forest, otu_test)
+
+plot(otu_test$plant_age, plant_predict, main = '测试集',
+     xlab = 'Plant age (days)', ylab = 'Predict')
+abline(1, 1)
+
+##OTU 的重要性评估
+#查看表示每个预测变量（细菌 OTU）重要性的得分
+#summary(otu_train.forest)
+importance_otu <- otu_train.forest$importance
+head(importance_otu)
+
+#或者使用函数 importance()
+importance_otu <- data.frame(importance(otu_train.forest), check.names = FALSE)
+head(importance_otu)
+
+#作图展示 top30 重要的 OTUs
+varImpPlot(otu_train.forest, n.var = min(30, nrow(otu_train.forest$importance)), 
+           main = 'Top 30 - variable importance')
+
+#可以根据某种重要性的高低排个序，例如根据“IncNodePurity”指标
+importance_otu <- importance_otu[order(importance_otu$IncNodePurity, decreasing = TRUE), ]
+head(importance_otu)
+
+#输出表格
+#write.table(importance_otu, 'importance_otu.txt', sep = '\t', col.names = NA, quote = FALSE)
+
+##交叉验证辅助评估选择特定数量的 OTU
+#5 次重复十折交叉验证
+set.seed(123)
+otu_train.cv <- replicate(5, rfcv(otu_train[-ncol(otu_train)], otu_train$plant_age, cv.fold = 10, step = 1.5), simplify = FALSE)
+otu_train.cv
+
+#提取验证结果绘图
+otu_train.cv <- data.frame(sapply(otu_train.cv, '[[', 'error.cv'))
+otu_train.cv$otus <- rownames(otu_train.cv)
+otu_train.cv <- reshape2::melt(otu_train.cv, id = 'otus')
+otu_train.cv$otus <- as.numeric(as.character(otu_train.cv$otus))
+
+otu_train.cv.mean <- aggregate(otu_train.cv$value, by = list(otu_train.cv$otus), FUN = mean)
+head(otu_train.cv.mean, 20)
+
+#拟合线图
+library(ggplot2)
+
+pho<-ggplot(otu_train.cv.mean, aes(Group.1, x)) +
+  geom_line() +
+  theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent')) +  
+  labs(title = '',x = 'Number of OTUs', y = 'Cross-validation error')
+
+
+
+p1 <- pho +geom_vline(aes(xintercept= 14),colour="red",linetype="dashed")+
+  geom_hline(yintercept = 11.18069,colour="blue")
+p1
+ggsave("p1.pdf", plot = p1, width = 8, height = 6) # 
+#提示保留 9-13 个重要的 OTU，可以使随机森林回归的精度最大化
+#首先根据某种重要性的高低排个序，例如根据“IncNodePurity”指标
+importance_otu <- importance_otu[order(importance_otu$IncNodePurity, decreasing = TRUE), ]
+
+#然后取出排名靠前的 OTU，例如 top10 最重要的 OTU
+importance_otu.select <- importance_otu[1:14, ]
+importance_otu.select
+
+#输出表格
+#write.table(importance_otu.select, 'importance_otu.select.txt', sep = '\t', col.names = NA, quote = FALSE)
+
+#不妨简单查看下这些重要的 OTU 丰度与植物生长时间的关系
+#可以看到趋势非常明显，包括根际富集或排斥等都有涉及
+otu_id.select <- rownames(importance_otu.select)
+otu.select <- otu[ ,c(otu_id.select, 'plant_age')]
+otu.select <- reshape2::melt(otu.select, id = 'plant_age')
+
+p <-ggplot(otu.select, aes(x = plant_age, y = value)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~variable, ncol = 3, scale = 'free_y') +
+  labs(title = '',x = 'Plant age (days)', y = 'Relative abundance')
+p
+##只包含 10 个重要预测变量的简约回归
+otu.select <- otu[ ,c(otu_id.select, 'plant_age')]
+
+#为了方便后续评估随机森林模型的性能，将总数据集分为训练集（占 70%）和测试集（占 30%）
+set.seed(123)
+train <- sample(nrow(otu.select), nrow(otu.select)*0.7)
+otu_train.select <- otu.select[train, ]
+otu_test.select <- otu.select[-train, ]
+
+#随机森林计算（默认生成 500 棵决策树），详情 ?randomForest
+set.seed(123)
+otu_train.select.forest <- randomForest(plant_age~., data = otu_train.select, importance = TRUE)
+otu_train.select.forest
+
+#使用训练集，查看预测精度
+plant_predict <- predict(otu_train.select.forest, otu_train.select)
+
+plot(otu_train.select$plant_age, plant_predict, main = '训练集', 
+     xlab = 'Plant age (days)', ylab = 'Predict')
+abline(1, 1)
+
+#使用测试集，评估预测性能
+plant_predict <- predict(otu_train.select.forest, otu_test.select)
+
+plot(otu_test.select$plant_age, plant_predict, main = '测试集',
+     xlab = 'Plant age (days)', ylab = 'Predict')
+abline(1, 1)
+
+
+
+# 使用逗号作为分隔符，并用双引号括起字符字段
+write.table(importance_otu.select, 'importance_otu.select.csv', sep = ',', col.names = NA, quote = TRUE)
+#在csv中补一下化合物列名
+# 读取CSV文件
+
+data <- read.csv('importance_otu.select.csv', header = TRUE,row.names = 1)
+
+
+
+# 创建IncNodePurity的条形图
+RF_photo<-ggplot(data, aes(x = reorder(rownames(data), IncNodePurity), y = IncNodePurity)) +
+  geom_bar(stat = "identity", fill = "#00896F", color = "black") +
+  coord_flip() + # 将条形图横向显示
+  labs(x = "Sample", y = "IncNodePurity") +
+  theme_minimal() # 设置图表主题
+
+RF_photo
+
+# 保存为PDF文件
+ggsave("RF_photo.pdf", plot = RF_photo, width = 8, height = 8) # 可以根据需要设置宽度和高度
+

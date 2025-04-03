@@ -1,0 +1,65 @@
+setwd("C:/Users/feips/Desktop/avian microbiome/Random forest/B-time/heatmap")
+
+# 加载包
+library(dplyr)
+library(pheatmap)
+
+# 读取数据（假设为CSV格式）
+data <- read.csv("B_micro.csv", check.names = FALSE)
+
+# 设置行名为样本名
+rownames(data) <- data$name
+data$name <- NULL
+# 按group分组并计算各菌属的平均值
+merged_data <- data %>%
+  group_by(group) %>%
+  summarise(across(everything(), mean, na.rm = TRUE))
+
+# 转换为矩阵并设置行名
+mat <- as.matrix(merged_data[, -1])
+rownames(mat) <- merged_data$group
+# 对合并后的数据按列（菌属）标准化
+scaled_mat <- scale(mat)
+# 绘制热图，显示标准化后的组均值
+pheatmap(scaled_mat,
+         cluster_rows = FALSE,  # 不聚类行（保持组顺序）
+         cluster_cols = TRUE,   # 聚类菌属
+         main = "Z-score Normalized Heatmap by Group",
+         color = colorRampPalette(c("blue", "white", "red"))(100))
+
+
+setwd("C:/Users/feips/Desktop/rf_heatmap")
+
+# 加载包
+library(pheatmap)
+
+# 读取数据（确保第一列是行名）
+data <- read.csv("H_heatmap.csv", row.names = 1)
+
+# 处理列名：将下划线替换为换行符
+colnames(data) <- gsub("_", "\n", colnames(data))
+
+# 设置颜色梯度（蓝-白-红）
+color_palette <- colorRampPalette(c("#0089BA", "white", "#FF6F91"))(100)
+breaks <- seq(-max(abs(data)), max(abs(data)), length.out = 100)
+
+# 绘制热图（关键修改：禁用行列聚类）
+pheatmap(
+  mat = data,
+  color = color_palette,
+  breaks = breaks,
+  cluster_rows = FALSE,  # 关闭行聚类
+  cluster_cols = FALSE,  # 关闭列聚类
+  show_rownames = TRUE,
+  show_colnames = TRUE,
+  fontsize_row = 8,
+  fontsize_col = 8,
+  cellwidth = 20,
+  cellheight = 15,
+  main = "Microbial Abundance Heatmap"
+)
+# 保存为PDF（取消注释以下行）
+# pdf("heatmap.pdf", width = 12, height = 8)
+# pheatmap(...) # 使用与上面相同的参数
+# dev.off()
+

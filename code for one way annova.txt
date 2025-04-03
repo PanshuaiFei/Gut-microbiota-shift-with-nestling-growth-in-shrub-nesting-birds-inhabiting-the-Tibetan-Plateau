@@ -1,0 +1,137 @@
+#枸杞表型
+rm(list = ls())
+setwd("C:/Users/feips/Desktop/avian microbiome/weight")
+
+#################################
+#读取数据，换成自己的文件名即可
+data <- read.csv("B_weight.csv",header=T)
+
+#将处理因子化
+data$group <- as.factor(data$group)
+#方差齐性检验bartlett.test
+nom <- bartlett.test(data$vegetative_trait~data$group,data = data)
+nom
+#检验结果只要P >0.05，说明方差是齐性的，可以继续方差分析了
+#################################
+# 单因素方差分析整体检验，看检验一下模型整体的显著性
+oneway<-aov(data$vegetative_trait~data$group,data = data)
+anova(oneway)
+#LSD多重比较,就可以得到显著性标记结果
+library(agricolae)
+out <- LSD.test(oneway,"data$group",p.adj="none")
+out
+#################################
+#整理绘图所需数据
+# 根据组计算每个处理的样本大小
+sample_sizes <- tapply(data$vegetative_trait, data$group, length)
+##################################
+mar<-out$groups
+rownamemar<-row.names(mar)
+newmar<-data.frame(rownamemar,mar$`data$vegetative_trait`,mar$groups)
+sort<-newmar[order(newmar$rownamemar),]
+# 将groups的数据框按列名排序，目的是保持与均值标准差的数据一一对应
+rowname<-row.names(out$means)
+mean<-out$means[,1]
+se <-((out$means[,2])/sqrt(sample_sizes))
+marker<-sort$mar.groups
+plotdata<-data.frame(rowname,mean,se,marker)
+plotdata
+###################################绘图
+library(ggplot2)
+# 设置字体
+windowsFonts(A = windowsFont("Times New Roman"),
+             B = windowsFont("Arial"))
+####################################################
+# Assuming plotdata and data are your data frames
+
+# Load necessary libraries
+library(ggplot2)
+
+# Define the desired order如果排名混乱就设置一下
+#desired_order <- c("Control", "Biochar", "Sheep manure", "Sheep manure + biochar")
+
+# Convert rowname to a factor with desired order
+#plotdata$rowname <- factor(plotdata$rowname, levels = desired_order)
+#颜色
+colours <- rev(rainbow(14, start = 0, end = 0.7))  # 设置渐变范围rainbow(14 为颜色数量
+
+# Create the barplot
+barplot <- ggplot(plotdata, aes(rowname, mean)) +
+  geom_bar(aes(fill = rowname), stat = "identity", color = "black", linewidth = 0.2,
+           width = 0.7, alpha = 0.6) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se, group = rowname),
+                width = 0.2, linewidth = 0.8, position = position_dodge(0.9)) +
+  scale_fill_manual(values = colours) +
+  scale_y_continuous(breaks = seq(0, 200, 20), limits = c(0, 100), expand = c(0, 0.00001)) +
+  
+  xlab("") + ylab("weight (g)")+
+  
+  
+  geom_text(aes(x = factor(rowname), y = mean + se + 10, label = marker),
+            size = 6, position = position_dodge(0.6)) +
+  
+  guides(color = guide_colorbar(order = 0),
+         fill = guide_legend(order = 1)) + labs(fill = "Treatment") +
+  theme_classic() +
+  theme(panel.border = element_rect(color = "black", fill = NA),
+        plot.margin = margin(1, 1, 1, 1),
+        text = element_text(size = 12, color = "black"),
+        axis.ticks.length = unit(-0.1, "cm"),
+        axis.text.x = element_text(angle = 45, hjust = 0.8, vjust = 0.9, color = "black", margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")),
+        axis.text.y = element_text(angle = 0, hjust = 0.8, vjust = 0.9, color = "black", margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")))
+#############################加浮动散点！！
+# Overlay the jitter plot
+combined_plot <- barplot +
+  geom_jitter(data = data, aes(x = group, y = vegetative_trait, fill = group),
+              position = position_jitter(0.22), shape = 21, size = 3, alpha = 1)
+# Display the combined plot
+print(combined_plot)
+####保存文件
+# 设置保存的文件名
+output_filename <- "combined_plot.pdf"
+
+# 设置 PDF 的长宽比（单位为英寸）
+pdf_width <- 8# 设置宽度为 8 英寸
+pdf_height <- 5 # 设置高度为 6 英寸
+###########
+#字体
+# 重新设定一下字体，不然保存为pdf出错
+combined_plot <- combined_plot + theme(text = element_text(family = "Times", color = "black"))
+# 保存图像
+# 保存图形为 PDF 文件，并设置长宽比
+ggsave(output_filename, plot = combined_plot, width = pdf_width, height = pdf_height)
+
+################################################################
+
+#######################ANNOVA##两两比对LSD分析
+# 统计结果#执行ANOVA分析
+anova_result <- aov(vegetative_trait ~ group, data = data)
+
+# 进行事后多重比较（LSD多重比较）
+lsd_test <- LSD.test(anova_result, "group", p.adj = "none")
+
+## 查看结果
+print(anova_result)
+summary(anova_result)
+summary(lsd_test)
+lsd_test
+
+## 输出结果
+# 将输出重定向到一个文件中
+output_file <- "ANOVA_and_LSD_results.txt"  # 设置输出文件名
+# 打开文件连接，将R输出重定向到文件
+sink(output_file)
+
+# 输出各项结果到文件
+cat("ANOVA Result:\n")
+print(anova_result)
+cat("\nSummary of ANOVA Result:\n")
+print(summary(anova_result))
+cat("\nSummary of LSD Test:\n")
+print(summary(lsd_test))
+cat("\nLSD Test Results:\n")
+print(lsd_test)
+
+# 停止将输出重定向到文件
+sink()
+

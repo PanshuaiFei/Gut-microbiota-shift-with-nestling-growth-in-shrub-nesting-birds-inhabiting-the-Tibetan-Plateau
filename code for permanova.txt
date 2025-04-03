@@ -1,0 +1,31 @@
+setwd("C:/Users/Administrator/Desktop/avian microbiome/avian microbiome/PCOA/B-PCOA/PERMANOVA")
+rm(list = ls())
+library(vegan)
+library(pairwiseAdonis)
+
+
+
+
+otu_raw<-read.csv("B_OTU.csv",row.names = 1)
+group<-read.csv("B_group.csv",row.names = 1)
+data<-t(otu_raw)
+##########PERMANOVA#######################################
+#使用vegan包adonis()执行PERMANOVA
+set.seed(123)
+adonis_result<-adonis2(data ~ group,  # 矩阵 ~ 表型变量
+                       group,  # 表型表格
+                       distance = "bray",   # 距离算法
+                       permutations = 9999)  # 排列次数
+adonis_result
+#输出结果为csv
+write.csv(adonis_result, 'PERMANOVA_adonis_result.csv',  quote = FALSE)
+##########################################################
+#使用pairwiseAdonis包执行事后两两分组的PERMANOVA分析
+#两两分组的 PERMANOVA 分析，详情 ?pairwise.adonis
+#例如，相异指数以 Bray-Curtis 为例，并基于 999 次置换估计 p 值，使用 fdr 校正 p 值
+set.seed(123)
+pairwise_adonis <- pairwise.adonis(x = data, factors = group$group, sim.method = 'bray', perm = 9999, p.adjust.m = 'fdr')
+pairwise_adonis
+#输出结果为csv
+write.csv(pairwise_adonis, 'pairwiseAdonis.adonis_pairwise.csv', row.names = FALSE, quote = FALSE)
+
